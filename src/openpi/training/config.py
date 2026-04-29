@@ -1020,7 +1020,7 @@ _CONFIGS = [
         optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
         ema_decay=0.999,
         weight_loader=weight_loaders.CheckpointWeightLoader(
-            "/media/jiayueru/Ckpt/WRL/openpi/checkpoints/hairuoliu/pi05_base/params",
+            "/share/project/liushengbang/.cache/openpi/openpi-assets/checkpoints/pi05_base/params",
             extra_missing_regex=".*force_encoder.*",
         ),
         num_train_steps=30_000,
@@ -1056,7 +1056,7 @@ _CONFIGS = [
         optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
         ema_decay=0.999,
         weight_loader=weight_loaders.CheckpointWeightLoader(
-            "/media/jiayueru/Ckpt/WRL/openpi/checkpoints/hairuoliu/pi05_base/params",
+            "/share/project/liushengbang/.cache/openpi/openpi-assets/checkpoints/pi05_base/params",
             extra_missing_regex=".*force_encoder.*",
         ),
         num_train_steps=30_000,
@@ -1093,7 +1093,7 @@ _CONFIGS = [
         optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
         ema_decay=0.999,
         weight_loader=weight_loaders.CheckpointWeightLoader(
-            "/media/jiayueru/Ckpt/WRL/openpi/checkpoints/hairuoliu/pi05_base/params",
+            "/share/project/liushengbang/.cache/openpi/openpi-assets/checkpoints/pi05_base/params",
             extra_missing_regex=".*force_encoder.*",
         ),
         num_train_steps=30_000,
@@ -1130,7 +1130,7 @@ _CONFIGS = [
         optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
         ema_decay=0.999,
         weight_loader=weight_loaders.CheckpointWeightLoader(
-            "/media/jiayueru/Ckpt/WRL/openpi/checkpoints/hairuoliu/pi05_base/params",
+            "/share/project/liushengbang/.cache/openpi/openpi-assets/checkpoints/pi05_base/params",
             extra_missing_regex=".*force_encoder.*",
         ),
         num_train_steps=30_000,
@@ -1205,6 +1205,82 @@ _CONFIGS = [
         ema_decay=0.999,
         weight_loader=weight_loaders.CheckpointWeightLoader(
             "/media/jiayueru/Ckpt/WRL/openpi/checkpoints/hairuoliu/pi05_base/params",
+            extra_missing_regex=".*force_encoder.*",
+        ),
+        num_train_steps=30_000,
+    ),
+    # Force-conditioned pick_flower from raw HDF5 with stride=5, 192x256 images, dup-front wrist,
+    # and pose + continuous gripper actions.
+    TrainConfig(
+        name="pi05_pick_flower_force_stride5_posecont_dupfront_192x256",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_horizon=30,
+            discrete_state_input=False,
+            use_force_condition=True,
+            force_dim=12,
+            force_history_len=8,
+            force_hidden_dim=256,
+            force_scale=1.0,
+        ),
+        data=LeRobotLiberoDataConfig(
+            repo_id="pick_flower_force_stride5_posecont_dupfront_192x256",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+            extra_delta_transform=False,
+            action_dim=7,
+            include_force_history=True,
+        ),
+        batch_size=32,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=300,
+            peak_lr=5e-5,
+            decay_steps=1_000_000,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "/share/project/liushengbang/.cache/openpi/openpi-assets/checkpoints/pi05_base/params",
+            extra_missing_regex=".*force_encoder.*",
+        ),
+        num_train_steps=30_000,
+    ),
+    # Force-conditioned wipe_whiteboard from raw HDF5 with stride=5, 192x256 images, dup-front wrist,
+    # and pose + continuous gripper actions.
+    TrainConfig(
+        name="pi05_wipe_whiteboard_force_stride5_posecont_dupfront_192x256",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_horizon=30,
+            discrete_state_input=False,
+            use_force_condition=True,
+            force_dim=12,
+            force_history_len=8,
+            force_hidden_dim=256,
+            force_scale=1.0,
+        ),
+        data=LeRobotLiberoDataConfig(
+            repo_id="wipe_whiteboard_force_stride5_posecont_dupfront_192x256",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+            extra_delta_transform=False,
+            action_dim=7,
+            include_force_history=True,
+        ),
+        batch_size=32,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=300,
+            peak_lr=5e-5,
+            decay_steps=1_000_000,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "/share/project/liushengbang/.cache/openpi/openpi-assets/checkpoints/pi05_base/params",
             extra_missing_regex=".*force_encoder.*",
         ),
         num_train_steps=30_000,

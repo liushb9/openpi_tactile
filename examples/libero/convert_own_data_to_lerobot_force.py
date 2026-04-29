@@ -16,7 +16,9 @@ Usage:
       --output-dir /path/to/output \
       --overwrite \
       --task "pick up the flower and put it in the vase" \
-      --force-history-len 8
+      --force-history-len 8 \
+      --image-height 224 \
+      --image-width 224
 """
 
 import shutil
@@ -38,16 +40,31 @@ except ImportError:
 FORCE_NORM = np.array([20.0, 20.0, 20.0, 2.0, 2.0, 2.0], dtype=np.float32)
 
 
-def _decode_and_resize(img_bytes: bytes, target_shape=(256, 256, 3)) -> np.ndarray:
+def _resize_with_pad(image: np.ndarray, target_height: int, target_width: int) -> np.ndarray:
+    """Match openpi resize_with_pad: keep aspect ratio, then pad with black."""
+    if image.shape[:2] == (target_height, target_width):
+        return image
+
+    cur_height, cur_width = image.shape[:2]
+    ratio = max(cur_width / target_width, cur_height / target_height)
+    resized_height = int(cur_height / ratio)
+    resized_width = int(cur_width / ratio)
+    resized = cv2.resize(image, (resized_width, resized_height), interpolation=cv2.INTER_LINEAR)
+
+    padded = np.zeros((target_height, target_width, image.shape[2]), dtype=image.dtype)
+    pad_top = (target_height - resized_height) // 2
+    pad_left = (target_width - resized_width) // 2
+    padded[pad_top : pad_top + resized_height, pad_left : pad_left + resized_width] = resized
+    return padded
+
+
+def _decode_and_resize(img_bytes: bytes, target_height: int = 224, target_width: int = 224) -> np.ndarray:
     assert cv2 is not None, "Need opencv-python: pip install opencv-python"
     arr = np.frombuffer(bytes(img_bytes), dtype=np.uint8)
     img_bgr = cv2.imdecode(arr, cv2.IMREAD_COLOR)
     if img_bgr is None:
         raise ValueError("cv2.imdecode failed.")
-    if img_bgr.shape[:2] != target_shape[:2]:
-        img_bgr = cv2.resize(
-            img_bgr, (target_shape[1], target_shape[0]), interpolation=cv2.INTER_LINEAR
-        )
+    img_bgr = _resize_with_pad(img_bgr, target_height, target_width)
     return cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
 
 
@@ -99,6 +116,8 @@ def main(
     task: str = "",
     force_history_len: int = 8,
     use_front_as_wrist: bool = False,
+    image_height: int = 224,
+    image_width: int = 224,
 ):
     """
     data_dir          : Directory with *.hdf5 episode files
@@ -110,6 +129,8 @@ def main(
     task              : Language task description
     force_history_len : Number of past timesteps for force history window
     use_front_as_wrist: Use cam_front for both image and wrist_image (ignore cam_high)
+    image_height      : Output image height after resize_with_pad
+    image_width       : Output image width after resize_with_pad
     """
     root = Path(output_dir) / repo_name if output_dir else None
     if root is not None and root.exists():
@@ -128,12 +149,12 @@ def main(
         features={
             "image": {
                 "dtype": "image",
-                "shape": (256, 256, 3),
+                "shape": (image_height, image_width, 3),
                 "names": ["height", "width", "channel"],
             },
             "wrist_image": {
                 "dtype": "image",
-                "shape": (256, 256, 3),
+                "shape": (image_height, image_width, 3),
                 "names": ["height", "width", "channel"],
             },
             "state": {
@@ -204,8 +225,8 @@ def main(
             actions = np.concatenate([pose,  [gripper_norm]]).astype(np.float32)
 
             try:
-                image       = _decode_and_resize(front_imgs[i], (256, 256, 3))
-                wrist_image = _decode_and_resize(high_imgs[i],  (256, 256, 3))
+                image = _decode_and_resize(front_imgs[i], image_height, image_width)
+                wrist_image = _decode_and_resize(high_imgs[i], image_height, image_width)
             except Exception as e:
                 print(f"  Frame {i} image decode failed, skipping: {e}")
                 continue

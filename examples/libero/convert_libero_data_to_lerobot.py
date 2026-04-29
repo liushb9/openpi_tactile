@@ -22,6 +22,8 @@ import shutil
 
 from lerobot.common.datasets.lerobot_dataset import HF_LEROBOT_HOME
 from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
+import numpy as np
+from PIL import Image
 import tensorflow_datasets as tfds
 import tyro
 
@@ -34,7 +36,45 @@ RAW_DATASET_NAMES = [
 ]  # For simplicity we will combine multiple Libero datasets into one training dataset
 
 
-def main(data_dir: str, *, push_to_hub: bool = False):
+def _to_uint8_hwc(image: np.ndarray) -> np.ndarray:
+    """Convert an image to uint8 HWC format before storing it in LeRobot."""
+    image = np.asarray(image)
+    if image.ndim != 3:
+        raise ValueError(f"Expected image to be 3D, got shape {image.shape}")
+
+    if image.shape[0] == 3 and image.shape[-1] != 3:
+        image = np.transpose(image, (1, 2, 0))
+
+    if np.issubdtype(image.dtype, np.floating):
+        if np.max(image) <= 1.0:
+            image = image * 255.0
+        image = np.clip(image, 0, 255).astype(np.uint8)
+    elif image.dtype != np.uint8:
+        image = np.clip(image, 0, 255).astype(np.uint8)
+
+    return image
+
+
+def _resize_with_pad(image: np.ndarray, target_height: int, target_width: int) -> np.ndarray:
+    """Match openpi resize_with_pad: keep aspect ratio, then pad with black."""
+    image = _to_uint8_hwc(image)
+    if image.shape[:2] == (target_height, target_width):
+        return image
+
+    cur_height, cur_width = image.shape[:2]
+    ratio = max(cur_width / target_width, cur_height / target_height)
+    resized_height = int(cur_height / ratio)
+    resized_width = int(cur_width / ratio)
+
+    resized = Image.fromarray(image).resize((resized_width, resized_height), resample=Image.BILINEAR)
+    padded = Image.new(resized.mode, (target_width, target_height), 0)
+    pad_top = (target_height - resized_height) // 2
+    pad_left = (target_width - resized_width) // 2
+    padded.paste(resized, (pad_left, pad_top))
+    return np.asarray(padded)
+
+
+def main(data_dir: str, *, push_to_hub: bool = False, image_height: int = 224, image_width: int = 224):
     # Clean up any existing dataset in the output directory
     output_path = HF_LEROBOT_HOME / REPO_NAME
     if output_path.exists():
@@ -42,7 +82,8 @@ def main(data_dir: str, *, push_to_hub: bool = False):
 
     # Create LeRobot dataset, define features to store
     # OpenPi assumes that proprio is stored in `state` and actions in `action`
-    # LeRobot assumes that dtype of image data is `image`
+    # LeRobot assumes that dtype of image data is `image`.
+    # Images are resized with pad to match openpi preprocessing instead of being stretched.
     dataset = LeRobotDataset.create(
         repo_id=REPO_NAME,
         robot_type="panda",
@@ -50,12 +91,12 @@ def main(data_dir: str, *, push_to_hub: bool = False):
         features={
             "image": {
                 "dtype": "image",
-                "shape": (256, 256, 3),
+                "shape": (image_height, image_width, 3),
                 "names": ["height", "width", "channel"],
             },
             "wrist_image": {
                 "dtype": "image",
-                "shape": (256, 256, 3),
+                "shape": (image_height, image_width, 3),
                 "names": ["height", "width", "channel"],
             },
             "state": {
@@ -81,8 +122,8 @@ def main(data_dir: str, *, push_to_hub: bool = False):
             for step in episode["steps"].as_numpy_iterator():
                 dataset.add_frame(
                     {
-                        "image": step["observation"]["image"],
-                        "wrist_image": step["observation"]["wrist_image"],
+                        "image": _resize_with_pad(step["observation"]["image"], image_height, image_width),
+                        "wrist_image": _resize_with_pad(step["observation"]["wrist_image"], image_height, image_width),
                         "state": step["observation"]["state"],
                         "actions": step["action"],
                         "task": step["language_instruction"].decode(),
