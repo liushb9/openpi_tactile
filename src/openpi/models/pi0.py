@@ -64,18 +64,33 @@ def posemb_sincos(
 
 
 class ForceEncoder(nnx.Module):
-    """Simple MLP encoder for force/torque history."""
+    """MLP encoder for force/torque history with zero-initialized output.
+
+    Input LayerNorm normalizes per-sample feature scale (on top of dataset-level
+    quantile normalization done by the data pipeline). The final Linear is zero-
+    initialized, so at step 0 the encoder output is exactly zero — adarms_cond
+    starts identical to the pi05 base, and the model gradually learns to use
+    force without destabilizing the pretrained adaRMS path.
+    """
 
     def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, rngs: nnx.Rngs):
         self.ln = nnx.LayerNorm(input_dim, rngs=rngs)
         self.linear1 = nnx.Linear(input_dim, hidden_dim, rngs=rngs)
-        self.linear2 = nnx.Linear(hidden_dim, output_dim, rngs=rngs)
+        self.linear2 = nnx.Linear(
+            hidden_dim,
+            output_dim,
+            kernel_init=nnx.initializers.zeros,
+            bias_init=nnx.initializers.zeros,
+            rngs=rngs,
+        )
+        self.ln_out = nnx.LayerNorm(output_dim, rngs=rngs)
 
     def __call__(self, x):
         x = self.ln(x)
         x = self.linear1(x)
         x = nnx.silu(x)
         x = self.linear2(x)
+        x = self.ln_out(x)
         return x
 
 

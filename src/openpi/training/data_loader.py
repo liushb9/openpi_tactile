@@ -1,14 +1,22 @@
 from collections.abc import Iterator, Sequence
+import io
+import json
 import logging
 import multiprocessing
 import os
+import pathlib
 import typing
 from typing import Literal, Protocol, SupportsIndex, TypeVar
 
 import jax
 import jax.numpy as jnp
-import lerobot.datasets.lerobot_dataset as lerobot_dataset
+try:
+    import lerobot.datasets.lerobot_dataset as lerobot_dataset
+except ModuleNotFoundError:
+    import lerobot.common.datasets.lerobot_dataset as lerobot_dataset
 import numpy as np
+import pandas as pd
+from PIL import Image
 import torch
 
 import openpi.models.model as _model
@@ -127,6 +135,72 @@ class FakeDataset(Dataset):
         return self._num_samples
 
 
+class LocalLeRobotParquetDataset(Dataset):
+    """Fallback reader for local LeRobot parquet datasets when lerobot API versions drift."""
+
+    def __init__(self, repo_id: str, action_horizon: int):
+        self._root = pathlib.Path(os.environ.get("HF_LEROBOT_HOME", "~/.cache/huggingface/lerobot")).expanduser() / repo_id
+        self._action_horizon = action_horizon
+        with (self._root / "meta" / "tasks.jsonl").open(encoding="utf-8") as f:
+            self.tasks = {int(item["task_index"]): item["task"] for item in map(json.loads, f)}
+        with (self._root / "meta" / "episodes.jsonl").open(encoding="utf-8") as f:
+            episodes = [json.loads(line) for line in f]
+
+        self._index: list[tuple[int, int]] = []
+        self._episode_paths: dict[int, pathlib.Path] = {}
+        for episode in episodes:
+            ep_idx = int(episode["episode_index"])
+            ep_chunk = ep_idx // 1000
+            self._episode_paths[ep_idx] = self._root / "data" / f"chunk-{ep_chunk:03d}" / f"episode_{ep_idx:06d}.parquet"
+            self._index.extend((ep_idx, frame_idx) for frame_idx in range(int(episode["length"])))
+
+        self._cache_ep_idx: int | None = None
+        self._cache_df: pd.DataFrame | None = None
+
+    def _episode(self, ep_idx: int) -> pd.DataFrame:
+        if self._cache_ep_idx != ep_idx:
+            self._cache_df = pd.read_parquet(self._episode_paths[ep_idx])
+            self._cache_ep_idx = ep_idx
+        assert self._cache_df is not None
+        return self._cache_df
+
+    @staticmethod
+    def _image(value) -> np.ndarray:
+        if isinstance(value, dict) and value.get("bytes") is not None:
+            return np.asarray(Image.open(io.BytesIO(value["bytes"])).convert("RGB"))
+        return np.asarray(value)
+
+    @staticmethod
+    def _array(value, dtype=np.float32) -> np.ndarray:
+        arr = np.asarray(value)
+        if arr.dtype == object:
+            arr = np.stack(arr)
+        return arr.astype(dtype)
+
+    def __getitem__(self, index: SupportsIndex) -> dict:
+        ep_idx, frame_idx = self._index[index.__index__()]
+        df = self._episode(ep_idx)
+        action_rows = [min(frame_idx + t, len(df) - 1) for t in range(self._action_horizon)]
+        actions = np.stack([self._array(df["actions"].iloc[i]) for i in action_rows])
+        task_index = int(df["task_index"].iloc[frame_idx])
+        return {
+            "image": self._image(df["image"].iloc[frame_idx]),
+            "wrist_image": self._image(df["wrist_image"].iloc[frame_idx]),
+            "state": self._array(df["state"].iloc[frame_idx]),
+            "actions": actions,
+            "force_history": self._array(df["force_history"].iloc[frame_idx]),
+            "timestamp": np.asarray(df["timestamp"].iloc[frame_idx], dtype=np.float32),
+            "frame_index": np.asarray(df["frame_index"].iloc[frame_idx], dtype=np.int64),
+            "episode_index": np.asarray(df["episode_index"].iloc[frame_idx], dtype=np.int64),
+            "index": np.asarray(df["index"].iloc[frame_idx], dtype=np.int64),
+            "task_index": np.asarray(task_index, dtype=np.int64),
+            "task": self.tasks[task_index],
+        }
+
+    def __len__(self) -> int:
+        return len(self._index)
+
+
 def create_torch_dataset(
     data_config: _config.DataConfig, action_horizon: int, model_config: _model.BaseModelConfig
 ) -> Dataset:
@@ -138,12 +212,16 @@ def create_torch_dataset(
         return FakeDataset(model_config, num_samples=1024)
 
     dataset_meta = lerobot_dataset.LeRobotDatasetMetadata(repo_id)
-    dataset = lerobot_dataset.LeRobotDataset(
-        data_config.repo_id,
-        delta_timestamps={
-            key: [t / dataset_meta.fps for t in range(action_horizon)] for key in data_config.action_sequence_keys
-        },
-    )
+    try:
+        dataset = lerobot_dataset.LeRobotDataset(
+            data_config.repo_id,
+            delta_timestamps={
+                key: [t / dataset_meta.fps for t in range(action_horizon)] for key in data_config.action_sequence_keys
+            },
+        )
+    except Exception as exc:
+        logging.warning("Falling back to local LeRobot parquet reader for %s: %s", repo_id, exc)
+        dataset = LocalLeRobotParquetDataset(repo_id, action_horizon)
 
     if data_config.prompt_from_task:
         tasks = dataset_meta.tasks

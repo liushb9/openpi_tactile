@@ -912,7 +912,7 @@ _CONFIGS = [
             base_config=DataConfig(
                 prompt_from_task=True,    # 从 tasks.jsonl 读取语言指令作为 prompt
             ),
-            extra_delta_transform=False,  # 已是 delta action，无需再次转换
+            extra_delta_transform=False,  # absolute EEF pose action; do not subtract joint state
         ),
         batch_size=32,
         lr_schedule=_optimizer.CosineDecaySchedule(
@@ -993,8 +993,9 @@ _CONFIGS = [
         name="pi05_pick_flower_force",
         model=pi0_config.Pi0Config(
             pi05=True,
+            action_dim=32,
             action_horizon=30,
-            discrete_state_input=False,
+            discrete_state_input=True,
             use_force_condition=True,
             force_dim=12,
             force_history_len=8,
@@ -1020,7 +1021,7 @@ _CONFIGS = [
         optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
         ema_decay=0.999,
         weight_loader=weight_loaders.CheckpointWeightLoader(
-            "/share/project/liushengbang/.cache/openpi/openpi-assets/checkpoints/pi05_base/params",
+            "/mnt/public2/liushengbang/openpi_data/openpi-assets/checkpoints/pi05_droid/params",
             extra_missing_regex=".*force_encoder.*",
         ),
         num_train_steps=30_000,
@@ -1029,8 +1030,9 @@ _CONFIGS = [
         name="pi05_wipe_whiteboard_force",
         model=pi0_config.Pi0Config(
             pi05=True,
+            action_dim=32,
             action_horizon=30,
-            discrete_state_input=False,
+            discrete_state_input=True,
             use_force_condition=True,
             force_dim=12,
             force_history_len=8,
@@ -1056,7 +1058,7 @@ _CONFIGS = [
         optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
         ema_decay=0.999,
         weight_loader=weight_loaders.CheckpointWeightLoader(
-            "/share/project/liushengbang/.cache/openpi/openpi-assets/checkpoints/pi05_base/params",
+            "/mnt/public2/liushengbang/openpi_data/openpi-assets/checkpoints/pi05_droid/params",
             extra_missing_regex=".*force_encoder.*",
         ),
         num_train_steps=30_000,
@@ -1066,8 +1068,9 @@ _CONFIGS = [
         name="pi05_pick_flower_force_dupfront",
         model=pi0_config.Pi0Config(
             pi05=True,
+            action_dim=32,
             action_horizon=30,
-            discrete_state_input=False,
+            discrete_state_input=True,
             use_force_condition=True,
             force_dim=12,
             force_history_len=8,
@@ -1093,7 +1096,7 @@ _CONFIGS = [
         optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
         ema_decay=0.999,
         weight_loader=weight_loaders.CheckpointWeightLoader(
-            "/share/project/liushengbang/.cache/openpi/openpi-assets/checkpoints/pi05_base/params",
+            "/mnt/public2/liushengbang/openpi_data/openpi-assets/checkpoints/pi05_droid/params",
             extra_missing_regex=".*force_encoder.*",
         ),
         num_train_steps=30_000,
@@ -1103,8 +1106,9 @@ _CONFIGS = [
         name="pi05_wipe_whiteboard_force_dupfront",
         model=pi0_config.Pi0Config(
             pi05=True,
+            action_dim=32,
             action_horizon=30,
-            discrete_state_input=False,
+            discrete_state_input=True,
             use_force_condition=True,
             force_dim=12,
             force_history_len=8,
@@ -1130,7 +1134,7 @@ _CONFIGS = [
         optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
         ema_decay=0.999,
         weight_loader=weight_loaders.CheckpointWeightLoader(
-            "/share/project/liushengbang/.cache/openpi/openpi-assets/checkpoints/pi05_base/params",
+            "/mnt/public2/liushengbang/openpi_data/openpi-assets/checkpoints/pi05_droid/params",
             extra_missing_regex=".*force_encoder.*",
         ),
         num_train_steps=30_000,
@@ -1140,8 +1144,9 @@ _CONFIGS = [
         name="pi05_pick_flower_force_framestep5",
         model=pi0_config.Pi0Config(
             pi05=True,
+            action_dim=32,
             action_horizon=30,
-            discrete_state_input=False,
+            discrete_state_input=True,
             use_force_condition=True,
             force_dim=12,
             force_history_len=8,
@@ -1167,7 +1172,7 @@ _CONFIGS = [
         optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
         ema_decay=0.999,
         weight_loader=weight_loaders.CheckpointWeightLoader(
-            "/media/jiayueru/Ckpt/WRL/openpi/checkpoints/hairuoliu/pi05_base/params",
+            "/mnt/public2/liushengbang/openpi_data/openpi-assets/checkpoints/pi05_droid/params",
             extra_missing_regex=".*force_encoder.*",
         ),
         num_train_steps=30_000,
@@ -1177,8 +1182,9 @@ _CONFIGS = [
         name="pi05_wipe_whiteboard_force_framestep5",
         model=pi0_config.Pi0Config(
             pi05=True,
+            action_dim=32,
             action_horizon=30,
-            discrete_state_input=False,
+            discrete_state_input=True,
             use_force_condition=True,
             force_dim=12,
             force_history_len=8,
@@ -1204,7 +1210,7 @@ _CONFIGS = [
         optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
         ema_decay=0.999,
         weight_loader=weight_loaders.CheckpointWeightLoader(
-            "/media/jiayueru/Ckpt/WRL/openpi/checkpoints/hairuoliu/pi05_base/params",
+            "/mnt/public2/liushengbang/openpi_data/openpi-assets/checkpoints/pi05_droid/params",
             extra_missing_regex=".*force_encoder.*",
         ),
         num_train_steps=30_000,
@@ -1215,8 +1221,9 @@ _CONFIGS = [
         name="pi05_pick_flower_force_stride5_posecont_dupfront_192x256",
         model=pi0_config.Pi0Config(
             pi05=True,
+            action_dim=32,
             action_horizon=30,
-            discrete_state_input=False,
+            discrete_state_input=True,
             use_force_condition=True,
             force_dim=12,
             force_history_len=8,
@@ -1242,7 +1249,7 @@ _CONFIGS = [
         optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
         ema_decay=0.999,
         weight_loader=weight_loaders.CheckpointWeightLoader(
-            "/share/project/liushengbang/.cache/openpi/openpi-assets/checkpoints/pi05_base/params",
+            "/mnt/public2/liushengbang/openpi_data/openpi-assets/checkpoints/pi05_droid/params",
             extra_missing_regex=".*force_encoder.*",
         ),
         num_train_steps=30_000,
@@ -1253,8 +1260,9 @@ _CONFIGS = [
         name="pi05_wipe_whiteboard_force_stride5_posecont_dupfront_192x256",
         model=pi0_config.Pi0Config(
             pi05=True,
+            action_dim=32,
             action_horizon=30,
-            discrete_state_input=False,
+            discrete_state_input=True,
             use_force_condition=True,
             force_dim=12,
             force_history_len=8,
@@ -1280,8 +1288,82 @@ _CONFIGS = [
         optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
         ema_decay=0.999,
         weight_loader=weight_loaders.CheckpointWeightLoader(
-            "/share/project/liushengbang/.cache/openpi/openpi-assets/checkpoints/pi05_base/params",
+            "/mnt/public2/liushengbang/openpi_data/openpi-assets/checkpoints/pi05_droid/params",
             extra_missing_regex=".*force_encoder.*",
+        ),
+        num_train_steps=30_000,
+    ),
+    # Continue wipe_whiteboard from the 20k checkpoint on mixed original + success + failure data.
+    TrainConfig(
+        name="pi05_wipe_whiteboard_force_stride5_posecont_dupfront_192x256_mixed_success_failure",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_dim=32,
+            action_horizon=30,
+            discrete_state_input=True,
+            use_force_condition=True,
+            force_dim=12,
+            force_history_len=8,
+            force_hidden_dim=256,
+            force_scale=1.0,
+        ),
+        data=LeRobotLiberoDataConfig(
+            repo_id="wipe_whiteboard_force_stride5_posecont_dupfront_192x256_mixed_success_failure",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+            extra_delta_transform=False,
+            action_dim=7,
+            include_force_history=True,
+        ),
+        batch_size=32,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=300,
+            peak_lr=5e-5,
+            decay_steps=1_000_000,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "/mnt/public2/liushengbang/openpi_tactile/checkpoints_/pi05_wipe_whiteboard_force_stride5_posecont_dupfront_192x256/wipe_whiteboard_run_stride5_posecont_dupfront_192x256_droidinit_h30_fscale10/20000/params",
+        ),
+        num_train_steps=30_000,
+    ),
+    # Continue wipe_whiteboard from the 20k checkpoint on mixed original + failure data.
+    TrainConfig(
+        name="pi05_wipe_whiteboard_force_stride5_posecont_dupfront_192x256_mixed_failure",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_dim=32,
+            action_horizon=30,
+            discrete_state_input=True,
+            use_force_condition=True,
+            force_dim=12,
+            force_history_len=8,
+            force_hidden_dim=256,
+            force_scale=1.0,
+        ),
+        data=LeRobotLiberoDataConfig(
+            repo_id="wipe_whiteboard_force_stride5_posecont_dupfront_192x256_mixed_failure",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+            extra_delta_transform=False,
+            action_dim=7,
+            include_force_history=True,
+        ),
+        batch_size=32,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=300,
+            peak_lr=5e-5,
+            decay_steps=1_000_000,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "/mnt/public2/liushengbang/openpi_tactile/checkpoints_/pi05_wipe_whiteboard_force_stride5_posecont_dupfront_192x256/wipe_whiteboard_run_stride5_posecont_dupfront_192x256_droidinit_h30_fscale10/20000/params",
         ),
         num_train_steps=30_000,
     ),

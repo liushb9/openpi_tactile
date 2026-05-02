@@ -8,7 +8,7 @@ Compared with convert_own_data_to_lerobot_force.py, this script adds:
   - configurable output image size, e.g. 192x256
 
 Output convention:
-  state   = joint(7) + continuous_gripper(1)
+  state   = pose(6) + continuous_gripper(1)
   actions = pose(6) + continuous_gripper(1)
 """
 
@@ -19,7 +19,10 @@ import h5py
 import numpy as np
 import tyro
 
-from lerobot.datasets.lerobot_dataset import LeRobotDataset
+try:
+    from lerobot.datasets.lerobot_dataset import LeRobotDataset
+except ModuleNotFoundError:
+    from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 
 try:
     import cv2
@@ -111,7 +114,7 @@ def main(
             },
             "state": {
                 "dtype": "float32",
-                "shape": (8,),
+                "shape": (7,),
                 "names": ["state"],
             },
             "actions": {
@@ -176,7 +179,7 @@ def main(
         frame_count = 0
         for i in range(len(indices)):
             continuous_gripper = np.array([float(grippers[i][0])], dtype=np.float32)
-            state = np.concatenate([joints[i], continuous_gripper]).astype(np.float32)
+            state = np.concatenate([poses[i], continuous_gripper]).astype(np.float32)
             actions = np.concatenate([poses[i], continuous_gripper]).astype(np.float32)
 
             try:

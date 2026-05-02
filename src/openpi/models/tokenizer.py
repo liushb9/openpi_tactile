@@ -7,7 +7,6 @@ import orbax.checkpoint as ocp
 import sentencepiece
 from transformers import AutoProcessor
 
-import openpi.models.utils.fsq_tokenizer as fsq_tokenizer
 import openpi.shared.download as download
 
 
@@ -249,6 +248,8 @@ class FSQTokenizer:
     """
 
     def __init__(self, max_len: int = 256, fsq_tokenizer_path: str | None = None):
+        import openpi.models.utils.fsq_tokenizer as fsq_tokenizer  # lazy import; pulls chex
+
         self._max_len = max_len
 
         assert fsq_tokenizer_path is not None, "fsq_tokenizer_path must be provided"
