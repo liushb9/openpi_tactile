@@ -3,13 +3,14 @@
 Output convention:
   state   = pose(6) + continuous_gripper(1)
   actions = pose(6) + continuous_gripper(1)
+  pose(6) = xyz(3) + Euler/RPY(3), matching the raw HDF5 puppet/pose convention.
 
 Sources:
   - original_hdf5_dir: raw HDF5 episodes, using puppet/pose and puppet/gripper[:, 0].
   - success_dir: optional video/action/force episode dirs whose actions are joint-space;
     pose/gripper are read from the matching raw HDF5 episode id.
-  - failure_dir: video/action/force episode dirs from EefIDM; actions[:, :6] are
-    EEF pose and actions[:, 6] is used as the continuous gripper.
+  - failure_dir: video/action/force episode dirs from EefIDM; actions[:, :6] must
+    use the same xyz + Euler/RPY convention and actions[:, 6] is used as the continuous gripper.
 """
 
 import shutil

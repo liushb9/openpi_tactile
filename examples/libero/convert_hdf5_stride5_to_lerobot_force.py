@@ -10,6 +10,7 @@ Compared with convert_own_data_to_lerobot_force.py, this script adds:
 Output convention:
   state   = pose(6) + continuous_gripper(1)
   actions = pose(6) + continuous_gripper(1)
+  pose(6) = xyz(3) + Euler/RPY(3), copied unchanged from puppet/pose.
 """
 
 import shutil

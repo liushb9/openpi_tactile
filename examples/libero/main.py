@@ -1,7 +1,6 @@
 import collections
 import dataclasses
 import logging
-import math
 import pathlib
 
 import imageio
@@ -133,7 +132,7 @@ def eval_libero(args: Args) -> None:
                             "observation/state": np.concatenate(
                                 (
                                     obs["robot0_eef_pos"],
-                                    _quat2axisangle(obs["robot0_eef_quat"]),
+                                    _quat2euler(obs["robot0_eef_quat"]),
                                     obs["robot0_gripper_qpos"],
                                 )
                             ),
@@ -196,22 +195,20 @@ def _get_libero_env(task, resolution, seed):
     return env, task_description
 
 
-def _quat2axisangle(quat):
-    """
-    Copied from robosuite: https://github.com/ARISE-Initiative/robosuite/blob/eafb81f54ffc104f905ee48a16bb15f059176ad3/robosuite/utils/transform_utils.py#L490C1-L512C55
-    """
-    # clip quaternion
-    if quat[3] > 1.0:
-        quat[3] = 1.0
-    elif quat[3] < -1.0:
-        quat[3] = -1.0
+def _quat2euler(quat):
+    """Convert robosuite quaternion order (x, y, z, w) to static XYZ Euler/RPY radians."""
+    x, y, z, w = np.asarray(quat, dtype=np.float64)
+    norm = np.sqrt(x * x + y * y + z * z + w * w)
+    if norm < 1e-8:
+        return np.zeros(3, dtype=np.float32)
+    x, y, z, w = x / norm, y / norm, z / norm, w / norm
 
-    den = np.sqrt(1.0 - quat[3] * quat[3])
-    if math.isclose(den, 0.0):
-        # This is (close to) a zero degree rotation, immediately return
-        return np.zeros(3)
-
-    return (quat[:3] * 2.0 * math.acos(quat[3])) / den
+    # Static XYZ / roll-pitch-yaw convention.
+    roll = np.arctan2(2.0 * (w * x + y * z), 1.0 - 2.0 * (x * x + y * y))
+    pitch_arg = np.clip(2.0 * (w * y - z * x), -1.0, 1.0)
+    pitch = np.arcsin(pitch_arg)
+    yaw = np.arctan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
+    return np.array([roll, pitch, yaw], dtype=np.float32)
 
 
 if __name__ == "__main__":

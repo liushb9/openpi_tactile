@@ -1255,7 +1255,7 @@ _CONFIGS = [
         num_train_steps=30_000,
     ),
     # Force-conditioned wipe_whiteboard from raw HDF5 with stride=5, 192x256 images, dup-front wrist,
-    # and pose + continuous gripper actions.
+    # and xyz + Euler/RPY + continuous gripper actions.
     TrainConfig(
         name="pi05_wipe_whiteboard_force_stride5_posecont_dupfront_192x256",
         model=pi0_config.Pi0Config(
