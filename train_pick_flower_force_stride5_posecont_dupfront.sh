@@ -10,7 +10,7 @@ HF_LEROBOT_HOME="/mnt/public2/liushengbang/Data/processed_lerobot/wan_worldrl_st
 OPENPI_DATA_HOME="/mnt/public2/liushengbang/openpi_data/openpi-assets"
 
 TASK_NAME="pi05_pick_flower_force_stride5_posecont_dupfront_192x256"
-EXP_NAME="${EXP_NAME:-pick_flower_run_stride5_posecont_dupfront_192x256_droidinit_h30_fscale10}"
+EXP_NAME="${EXP_NAME:-pick_flower_origin_wmrollout_stride5_posecont_dupfront_192x256_droidinit_h30_fscale10}"
 OVERWRITE_FLAG="${OVERWRITE_FLAG:---overwrite}"
 NUM_WORKERS="${NUM_WORKERS:-8}"
 

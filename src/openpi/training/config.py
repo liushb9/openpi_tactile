@@ -988,8 +988,9 @@ _CONFIGS = [
         ),
         num_train_steps=30_000,           # 数据量少时建议 5k~10k 步
     ),
-    # Force-conditioned pick_flower from raw HDF5 with stride=5, 192x256 images, dup-front wrist,
-    # and pose + continuous gripper actions.
+    # Force-conditioned pick_flower from raw HDF5 plus WM rollout synthetic data,
+    # with stride=5 for raw HDF5, 192x256 images, dup-front wrist, and
+    # xyz + Euler/RPY + continuous gripper actions.
     TrainConfig(
         name="pi05_pick_flower_force_stride5_posecont_dupfront_192x256",
         model=pi0_config.Pi0Config(
@@ -1004,7 +1005,7 @@ _CONFIGS = [
             force_scale=1.0,
         ),
         data=LeRobotLiberoDataConfig(
-            repo_id="pick_flower_force_stride5_posecont_dupfront_192x256",
+            repo_id="pick_flower_force_stride5_posecont_dupfront_192x256_origin_wmrollout",
             base_config=DataConfig(
                 prompt_from_task=True,
             ),
@@ -1027,8 +1028,9 @@ _CONFIGS = [
         ),
         num_train_steps=30_000,
     ),
-    # Force-conditioned wipe_whiteboard from raw HDF5 with stride=5, 192x256 images, dup-front wrist,
-    # and xyz + Euler/RPY + continuous gripper actions.
+    # Force-conditioned wipe_whiteboard from raw HDF5 plus WM rollout synthetic data,
+    # with stride=5 for raw HDF5, 192x256 images, dup-front wrist, and
+    # xyz + Euler/RPY + continuous gripper actions.
     TrainConfig(
         name="pi05_wipe_whiteboard_force_stride5_posecont_dupfront_192x256",
         model=pi0_config.Pi0Config(
@@ -1043,7 +1045,7 @@ _CONFIGS = [
             force_scale=1.0,
         ),
         data=LeRobotLiberoDataConfig(
-            repo_id="wipe_whiteboard_force_stride5_posecont_dupfront_192x256",
+            repo_id="wipe_whiteboard_force_stride5_posecont_dupfront_192x256_origin_synth_start0_n5",
             base_config=DataConfig(
                 prompt_from_task=True,
             ),

@@ -84,6 +84,16 @@ def build_force_history(force: np.ndarray, history_len: int) -> np.ndarray:
     return np.stack([padded[t : t + history_len] for t in range(len(normalized))], axis=0)
 
 
+def normalize_force_shape(force: np.ndarray) -> np.ndarray:
+    """Accept raw force saved as (T, 12) or batched rollout force saved as (1, T, 12)."""
+    force = np.asarray(force, dtype=np.float32)
+    if force.ndim == 3 and force.shape[0] == 1:
+        force = force[0]
+    if force.ndim != 2 or force.shape[1] != 12:
+        raise ValueError(f"Expected force shape (T, 12) or (1, T, 12), got {force.shape}")
+    return force
+
+
 def hdf5_pose_gripper(hdf5_path: Path, stride: int) -> tuple[np.ndarray, np.ndarray]:
     with h5py.File(hdf5_path, "r") as f:
         poses = f["puppet/pose"][:].astype(np.float32)
@@ -177,13 +187,15 @@ def add_video_episodes(
         video_path = ep_dir / "video.mp4"
         actions_path = ep_dir / "actions.npy"
         force_path = ep_dir / "force.npy"
+        if not force_path.exists():
+            force_path = ep_dir / "tactile.npy"
         if not (video_path.exists() and actions_path.exists() and force_path.exists()):
-            print("  [SKIP] missing video.mp4/actions.npy/force.npy")
+            print("  [SKIP] missing video.mp4/actions.npy/force.npy or tactile.npy")
             continue
         try:
             frames = read_video_frames(video_path, image_height, image_width)
             actions = np.load(actions_path).astype(np.float32)
-            force = np.load(force_path).astype(np.float32)
+            force = normalize_force_shape(np.load(force_path))
             if source == "success":
                 if original_hdf5_dir is None:
                     raise ValueError("success source requires original_hdf5_dir")
