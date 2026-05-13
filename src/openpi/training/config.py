@@ -311,7 +311,15 @@ class LeRobotLiberoDataConfig(DataConfigFactory):
             repack_mapping["observation/force_history"] = "force_history"
         repack_transform = _transforms.Group(
             inputs=[
-                _transforms.RepackTransform(repack_mapping)
+                _transforms.RepackTransform(
+                    repack_mapping,
+                    optional_paths={
+                        "advantage": ("advantage", "observation/advantage"),
+                        "return": ("return", "observation/return"),
+                        "reward": ("reward", "observation/reward"),
+                        "success": ("success", "observation/success"),
+                    },
+                )
             ]
         )
 
@@ -527,6 +535,9 @@ class TrainConfig:
 
     # If true, will enable wandb logging.
     wandb_enabled: bool = True
+    # Print trainable/frozen parameter matches at startup. This is especially
+    # useful for KI, where regex mistakes would silently update the VLM.
+    print_trainable_params: bool = True
 
     # Used to pass metadata to the policy server.
     policy_metadata: dict[str, Any] | None = None
@@ -550,13 +561,76 @@ class TrainConfig:
         return (pathlib.Path(self.checkpoint_base_dir) / self.name / self.exp_name).resolve()
 
     @property
+    def effective_freeze_filter(self) -> nnx.filterlib.Filter:
+        """Get all frozen parameters, including KI's VLM freeze when enabled."""
+        vlm_filter = None
+        if (
+            isinstance(self.model, pi0_config.Pi0Config)
+            and self.model.use_knowledge_insulation
+            and self.model.freeze_vlm_for_action_loss
+        ):
+            vlm_filter = self.model.get_vlm_freeze_filter()
+        if vlm_filter is None:
+            return self.freeze_filter
+        return nnx.Any(self.freeze_filter, vlm_filter)
+
+    @property
     def trainable_filter(self) -> nnx.filterlib.Filter:
         """Get the filter for the trainable parameters."""
-        return nnx.All(nnx.Param, nnx.Not(self.freeze_filter))
+        return nnx.All(nnx.Param, nnx.Not(self.effective_freeze_filter))
 
     def __post_init__(self) -> None:
         if self.resume and self.overwrite:
             raise ValueError("Cannot resume and overwrite at the same time.")
+
+
+def _pick_flower_force_ablation_config(name: str, mode: str) -> TrainConfig:
+    uses_advantage = mode in ("advantage", "ki_advantage")
+    return TrainConfig(
+        name=name,
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_dim=32,
+            action_horizon=30,
+            discrete_state_input=True,
+            use_force_condition=True,
+            force_dim=12,
+            force_history_len=8,
+            force_hidden_dim=256,
+            force_scale=1.0,
+            tactile_ablation_mode=mode,
+            adv_hidden_dim=256,
+            adv_dropout_prob=0.1,
+            adv_scale=1.0,
+            cfg_scale=1.0,
+            null_advantage_type="learned",
+        ),
+        data=LeRobotLiberoDataConfig(
+            repo_id="pick_flower_force_stride5_posecont_dupfront_192x256_origin_wmrollout",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+            extra_delta_transform=False,
+            action_dim=7,
+            include_force_history=True,
+        ),
+        batch_size=32,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=300,
+            peak_lr=5e-5,
+            decay_steps=1_000_000,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "/mnt/public2/liushengbang/openpi_data/openpi-assets/checkpoints/pi05_droid/params",
+            extra_missing_regex=(
+                ".*(force_encoder|advantage_encoder|null_advantage).*" if uses_advantage else ".*force_encoder.*"
+            ),
+        ),
+        num_train_steps=30_000,
+    )
 
 
 # Use `get_config` if you need to get a config by name in your code.
@@ -988,6 +1062,10 @@ _CONFIGS = [
         ),
         num_train_steps=30_000,           # 数据量少时建议 5k~10k 步
     ),
+    _pick_flower_force_ablation_config("pi05_pick_flower_force_baseline", "baseline"),
+    _pick_flower_force_ablation_config("pi05_pick_flower_force_ki", "ki"),
+    _pick_flower_force_ablation_config("pi05_pick_flower_force_advantage", "advantage"),
+    _pick_flower_force_ablation_config("pi05_pick_flower_force_ki_advantage", "ki_advantage"),
     # Force-conditioned pick_flower from raw HDF5 plus WM rollout synthetic data,
     # with stride=5 for raw HDF5, 192x256 images, dup-front wrist, and
     # xyz + Euler/RPY + continuous gripper actions.

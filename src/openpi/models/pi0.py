@@ -94,6 +94,30 @@ class ForceEncoder(nnx.Module):
         return x
 
 
+class AdvantageEncoder(nnx.Module):
+    """Small MLP that maps scalar advantage/success labels to adaRMS conditioning."""
+
+    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, rngs: nnx.Rngs):
+        self.ln = nnx.LayerNorm(input_dim, rngs=rngs)
+        self.linear1 = nnx.Linear(input_dim, hidden_dim, rngs=rngs)
+        self.linear2 = nnx.Linear(
+            hidden_dim,
+            output_dim,
+            kernel_init=nnx.initializers.zeros,
+            bias_init=nnx.initializers.zeros,
+            rngs=rngs,
+        )
+        self.ln_out = nnx.LayerNorm(output_dim, rngs=rngs)
+
+    def __call__(self, x):
+        x = self.ln(x)
+        x = self.linear1(x)
+        x = nnx.silu(x)
+        x = self.linear2(x)
+        x = self.ln_out(x)
+        return x
+
+
 class Pi0(_model.BaseModel):
     def __init__(self, config: pi0_config.Pi0Config, rngs: nnx.Rngs):
         super().__init__(config.action_dim, config.action_horizon, config.max_token_len)
@@ -141,6 +165,15 @@ class Pi0(_model.BaseModel):
                 output_dim=action_expert_config.width,  # must match adarms_cond dim
                 rngs=rngs,
             )
+        self.advantage_encoder = None
+        if config.use_advantage_conditioning:
+            self.advantage_encoder = AdvantageEncoder(
+                input_dim=config.adv_dim,
+                hidden_dim=config.adv_hidden_dim,
+                output_dim=action_expert_config.width,
+                rngs=rngs,
+            )
+            self.null_advantage = nnx.Param(jnp.zeros((action_expert_config.width,), dtype=jnp.float32))
 
         # This attribute gets automatically set by model.train() and model.eval().
         self.deterministic = True
@@ -181,7 +214,14 @@ class Pi0(_model.BaseModel):
 
     @at.typecheck
     def embed_suffix(
-        self, obs: _model.Observation, noisy_actions: _model.Actions, timestep: at.Float[at.Array, " b"]
+        self,
+        obs: _model.Observation,
+        noisy_actions: _model.Actions,
+        timestep: at.Float[at.Array, " b"],
+        *,
+        train: bool = False,
+        adv_dropout_rng: at.KeyArrayLike | None = None,
+        force_unconditional_advantage: bool = False,
     ) -> tuple[
         at.Float[at.Array, "b s emb"],
         at.Bool[at.Array, "b s"],
@@ -217,6 +257,14 @@ class Pi0(_model.BaseModel):
                 force_input = obs.force_history.reshape(B, -1)
                 force_cond = self.force_encoder(force_input)
                 adarms_cond = adarms_cond + self.config.force_scale * force_cond
+            if self.advantage_encoder is not None:
+                adv_cond = self._encode_advantage_condition(
+                    obs,
+                    train=train,
+                    adv_dropout_rng=adv_dropout_rng,
+                    force_unconditional=force_unconditional_advantage,
+                )
+                adarms_cond = adarms_cond + self.config.adv_scale * adv_cond
         else:
             # mix timestep + action information using an MLP (no adaRMS)
             time_tokens = einops.repeat(time_emb, "b emb -> b s emb", s=self.action_horizon)
@@ -235,11 +283,91 @@ class Pi0(_model.BaseModel):
         ar_mask = jnp.array(ar_mask)
         return tokens, input_mask, ar_mask, adarms_cond
 
+    def _encode_advantage_condition(
+        self,
+        obs: _model.Observation,
+        *,
+        train: bool,
+        adv_dropout_rng: at.KeyArrayLike | None,
+        force_unconditional: bool,
+    ) -> at.Float[at.Array, "b emb"]:
+        assert self.advantage_encoder is not None
+        advantage = _model.get_advantage_from_batch(obs, tuple(obs.state.shape[:-1]))
+        if advantage.shape[-1] != self.config.adv_dim:
+            advantage = jnp.reshape(advantage, (*advantage.shape[:-1], -1))
+            if advantage.shape[-1] < self.config.adv_dim:
+                pad_width = [(0, 0)] * advantage.ndim
+                pad_width[-1] = (0, self.config.adv_dim - advantage.shape[-1])
+                advantage = jnp.pad(advantage, pad_width)
+            else:
+                advantage = advantage[..., : self.config.adv_dim]
+        adv_cond = self.advantage_encoder(advantage)
+        if self.config.null_advantage_type == "learned":
+            null_cond = jnp.broadcast_to(self.null_advantage.value, adv_cond.shape)
+        else:
+            null_cond = jnp.zeros_like(adv_cond)
+
+        use_null = force_unconditional
+        if train and self.config.adv_dropout_prob > 0:
+            if adv_dropout_rng is None:
+                raise ValueError("adv_dropout_rng is required when advantage dropout is enabled.")
+            drop = jax.random.bernoulli(adv_dropout_rng, self.config.adv_dropout_prob, advantage.shape[:-1])
+            use_null = jnp.logical_or(use_null, drop[:, None])
+
+        return jnp.where(use_null, null_cond, adv_cond)
+
+    def _predict_velocity_with_prefix_cache(
+        self,
+        observation: _model.Observation,
+        prefix_tokens,
+        prefix_mask,
+        prefix_ar_mask,
+        kv_cache,
+        x_t,
+        time,
+        *,
+        train: bool = False,
+        adv_dropout_rng: at.KeyArrayLike | None = None,
+        force_unconditional_advantage: bool = False,
+    ):
+        batch_size = observation.state.shape[0]
+        suffix_tokens, suffix_mask, suffix_ar_mask, adarms_cond = self.embed_suffix(
+            observation,
+            x_t,
+            time,
+            train=train,
+            adv_dropout_rng=adv_dropout_rng,
+            force_unconditional_advantage=force_unconditional_advantage,
+        )
+        suffix_attn_mask = make_attn_mask(suffix_mask, suffix_ar_mask)
+        prefix_attn_mask = einops.repeat(prefix_mask, "b p -> b s p", s=suffix_tokens.shape[1])
+        full_attn_mask = jnp.concatenate([prefix_attn_mask, suffix_attn_mask], axis=-1)
+        assert full_attn_mask.shape == (
+            batch_size,
+            suffix_tokens.shape[1],
+            prefix_tokens.shape[1] + suffix_tokens.shape[1],
+        )
+        positions = jnp.sum(prefix_mask, axis=-1)[:, None] + jnp.cumsum(suffix_mask, axis=-1) - 1
+
+        (prefix_out, suffix_out), _ = self.PaliGemma.llm(
+            [None, suffix_tokens],
+            mask=full_attn_mask,
+            positions=positions,
+            kv_cache=kv_cache,
+            adarms_cond=[None, adarms_cond],
+        )
+        assert prefix_out is None
+        return self.action_out_proj(suffix_out[:, -self.action_horizon :])
+
     @override
     def compute_loss(
         self, rng: at.KeyArrayLike, observation: _model.Observation, actions: _model.Actions, *, train: bool = False
     ) -> at.Float[at.Array, "*b ah"]:
-        preprocess_rng, noise_rng, time_rng = jax.random.split(rng, 3)
+        if self.config.use_advantage_conditioning:
+            preprocess_rng, noise_rng, time_rng, adv_dropout_rng = jax.random.split(rng, 4)
+        else:
+            preprocess_rng, noise_rng, time_rng = jax.random.split(rng, 3)
+            adv_dropout_rng = None
         observation = _model.preprocess_observation(preprocess_rng, observation, train=train)
 
         batch_shape = actions.shape[:-2]
@@ -251,15 +379,36 @@ class Pi0(_model.BaseModel):
 
         # one big forward pass of prefix + suffix at once
         prefix_tokens, prefix_mask, prefix_ar_mask = self.embed_prefix(observation)
-        suffix_tokens, suffix_mask, suffix_ar_mask, adarms_cond = self.embed_suffix(observation, x_t, time)
-        input_mask = jnp.concatenate([prefix_mask, suffix_mask], axis=1)
-        ar_mask = jnp.concatenate([prefix_ar_mask, suffix_ar_mask], axis=0)
-        attn_mask = make_attn_mask(input_mask, ar_mask)
-        positions = jnp.cumsum(input_mask, axis=1) - 1
-        (prefix_out, suffix_out), _ = self.PaliGemma.llm(
-            [prefix_tokens, suffix_tokens], mask=attn_mask, positions=positions, adarms_cond=[None, adarms_cond]
-        )
-        v_t = self.action_out_proj(suffix_out[:, -self.action_horizon :])
+        if self.config.use_knowledge_insulation:
+            # Block continuous tactile/action loss gradients from updating the
+            # pretrained VLM backbone; only action-side modules are updated.
+            prefix_attn_mask = make_attn_mask(prefix_mask, prefix_ar_mask)
+            prefix_positions = jnp.cumsum(prefix_mask, axis=1) - 1
+            _, kv_cache = self.PaliGemma.llm([prefix_tokens, None], mask=prefix_attn_mask, positions=prefix_positions)
+            kv_cache = jax.lax.stop_gradient(kv_cache)
+            v_t = self._predict_velocity_with_prefix_cache(
+                observation,
+                prefix_tokens,
+                prefix_mask,
+                prefix_ar_mask,
+                kv_cache,
+                x_t,
+                time,
+                train=train,
+                adv_dropout_rng=adv_dropout_rng,
+            )
+        else:
+            suffix_tokens, suffix_mask, suffix_ar_mask, adarms_cond = self.embed_suffix(
+                observation, x_t, time, train=train, adv_dropout_rng=adv_dropout_rng
+            )
+            input_mask = jnp.concatenate([prefix_mask, suffix_mask], axis=1)
+            ar_mask = jnp.concatenate([prefix_ar_mask, suffix_ar_mask], axis=0)
+            attn_mask = make_attn_mask(input_mask, ar_mask)
+            positions = jnp.cumsum(input_mask, axis=1) - 1
+            (prefix_out, suffix_out), _ = self.PaliGemma.llm(
+                [prefix_tokens, suffix_tokens], mask=attn_mask, positions=positions, adarms_cond=[None, adarms_cond]
+            )
+            v_t = self.action_out_proj(suffix_out[:, -self.action_horizon :])
 
         return jnp.mean(jnp.square(v_t - u_t), axis=-1)
 
@@ -285,38 +434,33 @@ class Pi0(_model.BaseModel):
         prefix_attn_mask = make_attn_mask(prefix_mask, prefix_ar_mask)
         positions = jnp.cumsum(prefix_mask, axis=1) - 1
         _, kv_cache = self.PaliGemma.llm([prefix_tokens, None], mask=prefix_attn_mask, positions=positions)
+        if self.config.use_knowledge_insulation:
+            kv_cache = jax.lax.stop_gradient(kv_cache)
 
         def step(carry):
             x_t, time = carry
-            suffix_tokens, suffix_mask, suffix_ar_mask, adarms_cond = self.embed_suffix(
-                observation, x_t, jnp.broadcast_to(time, batch_size)
+            timestep = jnp.broadcast_to(time, batch_size)
+            v_t = self._predict_velocity_with_prefix_cache(
+                observation,
+                prefix_tokens,
+                prefix_mask,
+                prefix_ar_mask,
+                kv_cache,
+                x_t,
+                timestep,
             )
-            # `suffix_attn_mask` is shape (b, suffix_len, suffix_len) indicating how the suffix tokens can attend to each
-            # other
-            suffix_attn_mask = make_attn_mask(suffix_mask, suffix_ar_mask)
-            # `prefix_attn_mask` is shape (b, suffix_len, prefix_len) indicating how the suffix tokens can attend to the
-            # prefix tokens
-            prefix_attn_mask = einops.repeat(prefix_mask, "b p -> b s p", s=suffix_tokens.shape[1])
-            # `combined_mask` is shape (b, suffix_len, prefix_len + suffix_len) indicating how the suffix tokens (which
-            # generate the queries) can attend to the full prefix + suffix sequence (which generates the keys and values)
-            full_attn_mask = jnp.concatenate([prefix_attn_mask, suffix_attn_mask], axis=-1)
-            assert full_attn_mask.shape == (
-                batch_size,
-                suffix_tokens.shape[1],
-                prefix_tokens.shape[1] + suffix_tokens.shape[1],
-            )
-            # `positions` is shape (b, suffix_len) indicating the positions of the suffix tokens
-            positions = jnp.sum(prefix_mask, axis=-1)[:, None] + jnp.cumsum(suffix_mask, axis=-1) - 1
-
-            (prefix_out, suffix_out), _ = self.PaliGemma.llm(
-                [None, suffix_tokens],
-                mask=full_attn_mask,
-                positions=positions,
-                kv_cache=kv_cache,
-                adarms_cond=[None, adarms_cond],
-            )
-            assert prefix_out is None
-            v_t = self.action_out_proj(suffix_out[:, -self.action_horizon :])
+            if self.config.use_advantage_conditioning and self.config.cfg_scale != 1.0:
+                v_t_uncond = self._predict_velocity_with_prefix_cache(
+                    observation,
+                    prefix_tokens,
+                    prefix_mask,
+                    prefix_ar_mask,
+                    kv_cache,
+                    x_t,
+                    timestep,
+                    force_unconditional_advantage=True,
+                )
+                v_t = v_t_uncond + self.config.cfg_scale * (v_t - v_t_uncond)
 
             return x_t + dt * v_t, time + dt
 

@@ -177,13 +177,20 @@ class LocalLeRobotParquetDataset(Dataset):
             arr = np.stack(arr)
         return arr.astype(dtype)
 
+    @staticmethod
+    def _scalar_or_array(value) -> np.ndarray:
+        arr = np.asarray(value)
+        if arr.dtype == object:
+            arr = np.stack(arr)
+        return arr.astype(np.float32)
+
     def __getitem__(self, index: SupportsIndex) -> dict:
         ep_idx, frame_idx = self._index[index.__index__()]
         df = self._episode(ep_idx)
         action_rows = [min(frame_idx + t, len(df) - 1) for t in range(self._action_horizon)]
         actions = np.stack([self._array(df["actions"].iloc[i]) for i in action_rows])
         task_index = int(df["task_index"].iloc[frame_idx])
-        return {
+        item = {
             "image": self._image(df["image"].iloc[frame_idx]),
             "wrist_image": self._image(df["wrist_image"].iloc[frame_idx]),
             "state": self._array(df["state"].iloc[frame_idx]),
@@ -196,6 +203,10 @@ class LocalLeRobotParquetDataset(Dataset):
             "task_index": np.asarray(task_index, dtype=np.int64),
             "task": self.tasks[task_index],
         }
+        for key in ("advantage", "return", "reward", "success"):
+            if key in df.columns:
+                item[key] = self._scalar_or_array(df[key].iloc[frame_idx])
+        return item
 
     def __len__(self) -> int:
         return len(self._index)

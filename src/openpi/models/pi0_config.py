@@ -39,11 +39,38 @@ class Pi0Config(_model.BaseModelConfig):
     force_hidden_dim: int = 256
     force_scale: float = 1.0
 
+    # Tactile ablation config. "baseline" keeps the original force-conditioned
+    # behavior unchanged; the other modes are opt-in.
+    tactile_ablation_mode: str = "baseline"
+    use_knowledge_insulation: bool = False
+    use_advantage_conditioning: bool = False
+    adv_dim: int = 1
+    adv_hidden_dim: int = 256
+    adv_dropout_prob: float = 0.1
+    adv_scale: float = 1.0
+    cfg_scale: float = 1.0
+    null_advantage_type: str = "learned"
+    freeze_vlm_for_action_loss: bool | None = None
+
     def __post_init__(self):
         if self.max_token_len is None:
             object.__setattr__(self, "max_token_len", 200 if self.pi05 else 48)
         if self.discrete_state_input is None:
             object.__setattr__(self, "discrete_state_input", self.pi05)
+        if self.tactile_ablation_mode not in ("baseline", "ki", "advantage", "ki_advantage"):
+            raise ValueError(f"Unknown tactile_ablation_mode: {self.tactile_ablation_mode}")
+        mode_uses_ki = self.tactile_ablation_mode in ("ki", "ki_advantage")
+        mode_uses_advantage = self.tactile_ablation_mode in ("advantage", "ki_advantage")
+        object.__setattr__(self, "use_knowledge_insulation", self.use_knowledge_insulation or mode_uses_ki)
+        object.__setattr__(
+            self,
+            "use_advantage_conditioning",
+            self.use_advantage_conditioning or mode_uses_advantage,
+        )
+        if self.freeze_vlm_for_action_loss is None:
+            object.__setattr__(self, "freeze_vlm_for_action_loss", self.use_knowledge_insulation)
+        if self.null_advantage_type not in ("learned", "zero"):
+            raise ValueError(f"Unknown null_advantage_type: {self.null_advantage_type}")
 
     @property
     @override
@@ -76,6 +103,11 @@ class Pi0Config(_model.BaseModelConfig):
                     "right_wrist_0_rgb": image_mask_spec,
                 },
                 state=jax.ShapeDtypeStruct([batch_size, self.action_dim], jnp.float32),
+                force_history=(
+                    jax.ShapeDtypeStruct([batch_size, self.force_history_len, self.force_dim], jnp.float32)
+                    if self.use_force_condition
+                    else None
+                ),
                 tokenized_prompt=jax.ShapeDtypeStruct([batch_size, self.max_token_len], jnp.int32),
                 tokenized_prompt_mask=jax.ShapeDtypeStruct([batch_size, self.max_token_len], bool),
             )
@@ -113,3 +145,12 @@ class Pi0Config(_model.BaseModelConfig):
         if not filters:
             return nnx.Nothing
         return nnx.All(*filters)
+
+    def get_vlm_freeze_filter(self) -> nnx.filterlib.Filter:
+        """Freeze PaliGemma/SigLIP while leaving the action expert trainable."""
+        paligemma_llm_filter = nnx.All(
+            nnx_utils.PathRegex("PaliGemma/llm/.*"),
+            nnx.Not(nnx_utils.PathRegex(".*_1.*")),
+        )
+        vision_filter = nnx_utils.PathRegex("PaliGemma/img/.*")
+        return nnx.Any(vision_filter, paligemma_llm_filter)

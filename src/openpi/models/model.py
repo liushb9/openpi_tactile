@@ -101,6 +101,13 @@ class Observation(Generic[ArrayT]):
 
     # Force history for force conditioning (optional).
     force_history: at.Float[ArrayT, "*b k fd"] | None = None
+    # Optional scalar conditioning signal for tactile ablations.  The data
+    # pipeline accepts "advantage" / "return" / "reward" / "success" and the
+    # model falls back to advantage=1.0 when all are absent.
+    advantage: at.Float[ArrayT, "*b _"] | None = None
+    return_: at.Float[ArrayT, "*b _"] | None = None
+    reward: at.Float[ArrayT, "*b _"] | None = None
+    success: at.Float[ArrayT, "*b _"] | None = None
 
     # pi0-fast model specific fields.
 
@@ -126,6 +133,10 @@ class Observation(Generic[ArrayT]):
             image_masks=data["image_mask"],
             state=data["state"],
             force_history=data.get("force_history"),
+            advantage=data.get("advantage"),
+            return_=data.get("return"),
+            reward=data.get("reward"),
+            success=data.get("success"),
             tokenized_prompt=data.get("tokenized_prompt"),
             tokenized_prompt_mask=data.get("tokenized_prompt_mask"),
             token_ar_mask=data.get("token_ar_mask"),
@@ -137,6 +148,9 @@ class Observation(Generic[ArrayT]):
         result = dataclasses.asdict(self)
         result["image"] = result.pop("images")
         result["image_mask"] = result.pop("image_masks")
+        return_value = result.pop("return_")
+        if return_value is not None:
+            result["return"] = return_value
         return result
 
 
@@ -206,11 +220,48 @@ def preprocess_observation(
         image_masks=out_masks,
         state=observation.state,
         force_history=observation.force_history,
+        advantage=observation.advantage,
+        return_=observation.return_,
+        reward=observation.reward,
+        success=observation.success,
         tokenized_prompt=observation.tokenized_prompt,
         tokenized_prompt_mask=observation.tokenized_prompt_mask,
         token_ar_mask=observation.token_ar_mask,
         token_loss_mask=observation.token_loss_mask,
     )
+
+
+def get_advantage_from_batch(batch: Observation | at.PyTree, batch_shape: tuple[int, ...] | None = None) -> at.Array:
+    """Returns a [B, 1] advantage signal, defaulting to 1.0 for old datasets."""
+    if batch_shape is None:
+        if isinstance(batch, Observation):
+            batch_shape = tuple(batch.state.shape[:-1])
+        else:
+            batch_shape = tuple(batch["state"].shape[:-1])
+
+    value = None
+    if isinstance(batch, Observation):
+        for attr in ("advantage", "return_", "reward", "success"):
+            candidate = getattr(batch, attr)
+            if candidate is not None:
+                value = candidate
+                break
+    else:
+        for key in ("advantage", "return", "reward", "success"):
+            if key in batch:
+                value = batch[key]
+                break
+
+    if value is None:
+        return jnp.ones((*batch_shape, 1), dtype=jnp.float32)
+
+    advantage = jnp.asarray(value, dtype=jnp.float32)
+    if advantage.ndim == 0:
+        return jnp.broadcast_to(advantage, (*batch_shape, 1))
+    if tuple(advantage.shape) == batch_shape:
+        return advantage[..., None]
+    advantage = jnp.reshape(advantage, (*batch_shape, -1))
+    return advantage[..., :1]
 
 
 @dataclasses.dataclass(frozen=True)

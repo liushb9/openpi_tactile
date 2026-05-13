@@ -95,10 +95,22 @@ class RepackTransform(DataTransformFn):
     """
 
     structure: at.PyTree[str]
+    # Optional flat output path -> candidate input paths.  Missing candidates are
+    # ignored, so old datasets without advantage/reward labels keep working.
+    optional_paths: Mapping[str, Sequence[str]] = dataclasses.field(default_factory=dict)
 
     def __call__(self, data: DataDict) -> DataDict:
         flat_item = flatten_dict(data)
-        return jax.tree.map(lambda k: flat_item[k], self.structure)
+        output = jax.tree.map(lambda k: flat_item[k], self.structure)
+        if not self.optional_paths:
+            return output
+        flat_output = flatten_dict(output)
+        for output_path, candidate_paths in self.optional_paths.items():
+            for candidate_path in candidate_paths:
+                if candidate_path in flat_item:
+                    flat_output[output_path] = flat_item[candidate_path]
+                    break
+        return unflatten_dict(flat_output)
 
 
 @dataclasses.dataclass(frozen=True)

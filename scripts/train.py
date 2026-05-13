@@ -17,6 +17,7 @@ import tqdm_loggable.auto as tqdm
 import wandb
 
 import openpi.models.model as _model
+import openpi.models.pi0_config as pi0_config
 import openpi.shared.array_typing as at
 import openpi.shared.nnx_utils as nnx_utils
 import openpi.training.checkpoints as _checkpoints
@@ -81,6 +82,38 @@ def _load_weights_and_validate(loader: _weight_loaders.WeightLoader, params_shap
     )
 
 
+def _param_count(value: Any) -> int:
+    array = value.value if hasattr(value, "value") else value
+    return int(np.prod(array.shape)) if hasattr(array, "shape") else 1
+
+
+def _path_to_str(path: tuple[Any, ...]) -> str:
+    return "/".join(str(part) for part in path)
+
+
+def log_param_filter_matches(config: _config.TrainConfig, params: nnx.State) -> None:
+    trainable = params.filter(config.trainable_filter).flat_state()
+    frozen = params.filter(nnx.All(nnx.Param, config.effective_freeze_filter)).flat_state()
+    trainable_count = sum(_param_count(v) for v in trainable.values())
+    frozen_count = sum(_param_count(v) for v in frozen.values())
+    logging.info(
+        "Parameter filter summary: trainable leaves=%s params=%s, frozen leaves=%s params=%s",
+        len(trainable),
+        trainable_count,
+        len(frozen),
+        frozen_count,
+    )
+    if isinstance(config.model, pi0_config.Pi0Config) and config.model.use_knowledge_insulation:
+        logging.info(
+            "KI enabled: VLM paths should be frozen while action expert, "
+            "force_encoder, and advantage_encoder stay trainable."
+        )
+    for label, state in (("TRAINABLE", trainable), ("FROZEN", frozen)):
+        logging.info("%s parameter paths:", label)
+        for path in sorted(_path_to_str(path) for path in state):
+            logging.info("  %s", path)
+
+
 @at.typecheck
 def init_train_state(
     config: _config.TrainConfig, init_rng: at.KeyArrayLike, mesh: jax.sharding.Mesh, *, resume: bool
@@ -101,7 +134,9 @@ def init_train_state(
 
         params = nnx.state(model)
         # Convert frozen params to bfloat16.
-        params = nnx_utils.state_map(params, config.freeze_filter, lambda p: p.replace(p.value.astype(jnp.bfloat16)))
+        params = nnx_utils.state_map(
+            params, config.effective_freeze_filter, lambda p: p.replace(p.value.astype(jnp.bfloat16))
+        )
 
         return training_utils.TrainState(
             step=0,
@@ -114,6 +149,8 @@ def init_train_state(
         )
 
     train_state_shape = jax.eval_shape(init, init_rng)
+    if config.print_trainable_params:
+        log_param_filter_matches(config, train_state_shape.params)
     state_sharding = sharding.fsdp_sharding(train_state_shape, mesh, log=True)
 
     if resume:
