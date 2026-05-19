@@ -88,7 +88,15 @@ def create_rlds_dataloader(
 
 def main(config_name: str, max_frames: int | None = None):
     config = _config.get_config(config_name)
-    data_config = config.data.create(config.assets_dirs, config.model)
+    original_model_transform_factory = _config.ModelTransformFactory
+    try:
+        # Norm stats are computed before model-level transforms such as tokenization.
+        # Avoid constructing tokenizers here, since they may require downloading assets
+        # that are irrelevant for state/action/force normalization.
+        _config.ModelTransformFactory = lambda *args, **kwargs: (lambda model_config: transforms.Group())
+        data_config = config.data.create(config.assets_dirs, config.model)
+    finally:
+        _config.ModelTransformFactory = original_model_transform_factory
     
 
     if data_config.rlds_data_dir is not None:

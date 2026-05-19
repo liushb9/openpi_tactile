@@ -26,6 +26,15 @@ def _parse_image(image) -> np.ndarray:
     return image
 
 
+def _get(data: dict, flat_key: str):
+    if flat_key in data:
+        return data[flat_key]
+    value = data
+    for part in flat_key.split("/"):
+        value = value[part]
+    return value
+
+
 @dataclasses.dataclass(frozen=True)
 class LiberoInputs(transforms.DataTransformFn):
     """
@@ -49,12 +58,12 @@ class LiberoInputs(transforms.DataTransformFn):
         # and two wrist views (left and right). If your dataset does not have a particular type
         # of image, e.g. wrist images, you can comment it out here and replace it with zeros like we do for the
         # right wrist image below.
-        base_image = _parse_image(data["observation/image"])
-        wrist_image = _parse_image(data["observation/wrist_image"])
+        base_image = _parse_image(_get(data, "observation/image"))
+        wrist_image = _parse_image(_get(data, "observation/wrist_image"))
 
         # Create inputs dict. Do not change the keys in the dict below.
         inputs = {
-            "state": data["observation/state"],
+            "state": _get(data, "observation/state"),
             "image": {
                 "base_0_rgb": base_image,
                 "left_wrist_0_rgb": wrist_image,
@@ -81,8 +90,15 @@ class LiberoInputs(transforms.DataTransformFn):
             inputs["prompt"] = data["prompt"]
 
         # Pass through force history if available (for force-conditioned models).
-        if "observation/force_history" in data:
-            inputs["force_history"] = np.asarray(data["observation/force_history"], dtype=np.float32)
+        if "observation/force_history" in data or "observation" in data and "force_history" in data["observation"]:
+            inputs["force_history"] = np.asarray(_get(data, "observation/force_history"), dtype=np.float32)
+
+        for key in ("advantage", "return", "reward", "success"):
+            if key in data:
+                value = np.asarray(data[key], dtype=np.float32)
+                if value.ndim == 0:
+                    value = value[None]
+                inputs[key] = value
 
         return inputs
 

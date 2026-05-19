@@ -89,6 +89,7 @@ def main(
     image_height: int = 192,
     image_width: int = 256,
     fps: int = 6,
+    advantage_value: float | None = None,
 ):
     root = Path(output_dir) / repo_name if output_dir else None
     if root is not None and root.exists():
@@ -97,38 +98,46 @@ def main(
         else:
             raise FileExistsError(f"Output directory exists: {root}. Use --overwrite to replace.")
 
+    features = {
+        "image": {
+            "dtype": "image",
+            "shape": (image_height, image_width, 3),
+            "names": ["height", "width", "channel"],
+        },
+        "wrist_image": {
+            "dtype": "image",
+            "shape": (image_height, image_width, 3),
+            "names": ["height", "width", "channel"],
+        },
+        "state": {
+            "dtype": "float32",
+            "shape": (7,),
+            "names": ["state"],
+        },
+        "actions": {
+            "dtype": "float32",
+            "shape": (7,),
+            "names": ["actions"],
+        },
+        "force_history": {
+            "dtype": "float32",
+            "shape": (force_history_len, 12),
+            "names": ["force_history"],
+        },
+    }
+    if advantage_value is not None:
+        features["advantage"] = {
+            "dtype": "float32",
+            "shape": (1,),
+            "names": ["advantage"],
+        }
+
     dataset = LeRobotDataset.create(
         repo_id=repo_name,
         robot_type="panda",
         fps=fps,
         root=root,
-        features={
-            "image": {
-                "dtype": "image",
-                "shape": (image_height, image_width, 3),
-                "names": ["height", "width", "channel"],
-            },
-            "wrist_image": {
-                "dtype": "image",
-                "shape": (image_height, image_width, 3),
-                "names": ["height", "width", "channel"],
-            },
-            "state": {
-                "dtype": "float32",
-                "shape": (7,),
-                "names": ["state"],
-            },
-            "actions": {
-                "dtype": "float32",
-                "shape": (7,),
-                "names": ["actions"],
-            },
-            "force_history": {
-                "dtype": "float32",
-                "shape": (force_history_len, 12),
-                "names": ["force_history"],
-            },
-        },
+        features=features,
         image_writer_threads=10,
         image_writer_processes=5,
     )
@@ -190,16 +199,18 @@ def main(
                 print(f"  Frame {i} image decode failed, skipping: {e}")
                 continue
 
-            dataset.add_frame(
-                {
-                    "image": image,
-                    "wrist_image": wrist_image,
-                    "state": state,
-                    "actions": actions,
-                    "force_history": force_hist[i],
-                    "task": task,
-                }
-            )
+            frame = {
+                "image": image,
+                "wrist_image": wrist_image,
+                "state": state,
+                "actions": actions,
+                "force_history": force_hist[i],
+                "task": task,
+            }
+            if advantage_value is not None:
+                frame["advantage"] = np.array([advantage_value], dtype=np.float32)
+
+            dataset.add_frame(frame)
             frame_count += 1
 
         if frame_count == 0:

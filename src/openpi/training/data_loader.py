@@ -222,22 +222,28 @@ def create_torch_dataset(
     if repo_id == "fake":
         return FakeDataset(model_config, num_samples=1024)
 
-    dataset_meta = lerobot_dataset.LeRobotDatasetMetadata(repo_id)
-    try:
-        dataset = lerobot_dataset.LeRobotDataset(
-            data_config.repo_id,
-            delta_timestamps={
-                key: [t / dataset_meta.fps for t in range(action_horizon)] for key in data_config.action_sequence_keys
-            },
-        )
-    except Exception as exc:
-        logging.warning("Falling back to local LeRobot parquet reader for %s: %s", repo_id, exc)
+    local_root = pathlib.Path(os.environ.get("HF_LEROBOT_HOME", "~/.cache/huggingface/lerobot")).expanduser() / repo_id
+    if (local_root / "meta" / "tasks.jsonl").exists() and (local_root / "meta" / "episodes.jsonl").exists():
         dataset = LocalLeRobotParquetDataset(repo_id, action_horizon)
+        tasks = dataset.tasks
+    else:
+        dataset_meta = lerobot_dataset.LeRobotDatasetMetadata(repo_id)
+        try:
+            dataset = lerobot_dataset.LeRobotDataset(
+                data_config.repo_id,
+                delta_timestamps={
+                    key: [t / dataset_meta.fps for t in range(action_horizon)] for key in data_config.action_sequence_keys
+                },
+            )
+        except Exception as exc:
+            logging.warning("Falling back to local LeRobot parquet reader for %s: %s", repo_id, exc)
+            dataset = LocalLeRobotParquetDataset(repo_id, action_horizon)
 
-    if data_config.prompt_from_task:
         tasks = dataset_meta.tasks
         if hasattr(tasks, "to_dict") and hasattr(tasks, "columns") and "task_index" in tasks.columns:
             tasks = {int(task_index): str(task) for task, task_index in tasks["task_index"].items()}
+
+    if data_config.prompt_from_task:
         dataset = TransformedDataset(dataset, [_transforms.PromptFromLeRobotTask(tasks)])
 
     return dataset
