@@ -102,23 +102,32 @@ def hdf5_pose_gripper(hdf5_path: Path, stride: int) -> tuple[np.ndarray, np.ndar
     return poses[indices], grippers[indices, None]
 
 
-def add_episode(dataset, frames, pose_gripper: np.ndarray, force: np.ndarray, task: str, force_history_len: int) -> bool:
+def add_episode(
+    dataset,
+    frames,
+    pose_gripper: np.ndarray,
+    force: np.ndarray,
+    task: str,
+    force_history_len: int,
+    advantage_value: float | None = None,
+) -> bool:
     t = min(len(frames), len(pose_gripper), len(force))
     if t < 2:
         return False
     force_hist = build_force_history(force[:t], force_history_len)
     for i in range(t):
         action = pose_gripper[i].astype(np.float32)
-        dataset.add_frame(
-            {
-                "image": frames[i],
-                "wrist_image": frames[i],
-                "state": action,
-                "actions": action,
-                "force_history": force_hist[i],
-                "task": task,
-            }
-        )
+        frame = {
+            "image": frames[i],
+            "wrist_image": frames[i],
+            "state": action,
+            "actions": action,
+            "force_history": force_hist[i],
+            "task": task,
+        }
+        if advantage_value is not None:
+            frame["advantage"] = np.array([advantage_value], dtype=np.float32)
+        dataset.add_frame(frame)
     dataset.save_episode()
     return True
 
@@ -132,6 +141,7 @@ def add_hdf5_episodes(
     stride: int,
     image_height: int,
     image_width: int,
+    advantage_value: float | None = None,
 ) -> int:
     count = 0
     hdf5_files = sorted(original_hdf5_dir.glob("*.hdf5"), key=lambda p: int(p.stem) if p.stem.isdigit() else p.stem)
@@ -163,7 +173,7 @@ def add_hdf5_episodes(
             print(f"  Image decode failed, skipping: {exc}")
             continue
         pose_gripper = np.concatenate([poses[indices], grippers[indices, None]], axis=-1).astype(np.float32)
-        if add_episode(dataset, frames, pose_gripper, force[indices], task, force_history_len):
+        if add_episode(dataset, frames, pose_gripper, force[indices], task, force_history_len, advantage_value):
             count += 1
     return count
 
@@ -179,6 +189,7 @@ def add_video_episodes(
     source: str,
     original_hdf5_dir: Path | None = None,
     stride: int = 5,
+    advantage_value: float | None = None,
 ) -> int:
     count = 0
     ep_dirs = sorted([d for d in data_dir.iterdir() if d.is_dir()], key=lambda p: int(p.name) if p.name.isdigit() else p.name)
@@ -209,7 +220,7 @@ def add_video_episodes(
         except Exception as exc:
             print(f"  Load failed, skipping: {exc}")
             continue
-        if add_episode(dataset, frames, pose_gripper, force, task, force_history_len):
+        if add_episode(dataset, frames, pose_gripper, force, task, force_history_len, advantage_value):
             count += 1
     return count
 
@@ -227,6 +238,7 @@ def main(
     image_height: int = 192,
     image_width: int = 256,
     fps: int = 6,
+    advantage_value: float | None = None,
 ):
     root = Path(output_dir) / repo_name if output_dir else None
     if root is not None and root.exists():
@@ -235,18 +247,22 @@ def main(
         else:
             raise FileExistsError(f"Output directory exists: {root}. Use --overwrite to replace.")
 
+    features = {
+        "image": {"dtype": "image", "shape": (image_height, image_width, 3), "names": ["height", "width", "channel"]},
+        "wrist_image": {"dtype": "image", "shape": (image_height, image_width, 3), "names": ["height", "width", "channel"]},
+        "state": {"dtype": "float32", "shape": (7,), "names": ["state"]},
+        "actions": {"dtype": "float32", "shape": (7,), "names": ["actions"]},
+        "force_history": {"dtype": "float32", "shape": (force_history_len, 12), "names": ["force_history"]},
+    }
+    if advantage_value is not None:
+        features["advantage"] = {"dtype": "float32", "shape": (1,), "names": ["advantage"]}
+
     dataset = LeRobotDataset.create(
         repo_id=repo_name,
         robot_type="panda",
         fps=fps,
         root=root,
-        features={
-            "image": {"dtype": "image", "shape": (image_height, image_width, 3), "names": ["height", "width", "channel"]},
-            "wrist_image": {"dtype": "image", "shape": (image_height, image_width, 3), "names": ["height", "width", "channel"]},
-            "state": {"dtype": "float32", "shape": (7,), "names": ["state"]},
-            "actions": {"dtype": "float32", "shape": (7,), "names": ["actions"]},
-            "force_history": {"dtype": "float32", "shape": (force_history_len, 12), "names": ["force_history"]},
-        },
+        features=features,
         image_writer_threads=10,
         image_writer_processes=5,
     )
@@ -260,6 +276,7 @@ def main(
         stride=stride,
         image_height=image_height,
         image_width=image_width,
+        advantage_value=advantage_value,
     )
     success_count = 0
     if success_dir:
@@ -273,6 +290,7 @@ def main(
             source="success",
             original_hdf5_dir=original_path,
             stride=stride,
+            advantage_value=advantage_value,
         )
     failure_count = add_video_episodes(
         dataset,
@@ -282,6 +300,7 @@ def main(
         image_height=image_height,
         image_width=image_width,
         source="failure",
+        advantage_value=advantage_value,
     )
     print(f"Saved episodes: original={original_count}, success={success_count}, failure={failure_count}")
 

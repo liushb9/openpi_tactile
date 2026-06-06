@@ -1,0 +1,168 @@
+<mxfile host="app.diagrams.net" modified="2026-05-26T00:00:00.000Z" agent="Codex" version="24.7.17" type="device">
+  <diagram id="pi05-token-level-framework" name="pi0.5 tactile token-level framework">
+    <mxGraphModel dx="1600" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <mxCell id="title" value="pi0.5 tactile policy: token-level architecture, adaRMS conditioning, KI and advantage conditioning" style="text;html=1;strokeColor=none;fillColor=none;fontSize=24;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="160" y="20" width="1280" height="40" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="g_inputs" value="Raw observation / training sample" style="swimlane;html=1;startSize=34;rounded=1;whiteSpace=wrap;fillColor=#f8fafc;strokeColor=#64748b;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="90" width="260" height="720" as="geometry"/>
+        </mxCell>
+        <mxCell id="front" value="front RGB&lt;br&gt;base_0_rgb" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#2563eb;fontSize=13;" vertex="1" parent="g_inputs">
+          <mxGeometry x="30" y="60" width="200" height="58" as="geometry"/>
+        </mxCell>
+        <mxCell id="wrist" value="wrist RGB&lt;br&gt;left_wrist_0_rgb" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#2563eb;fontSize=13;" vertex="1" parent="g_inputs">
+          <mxGeometry x="30" y="130" width="200" height="58" as="geometry"/>
+        </mxCell>
+        <mxCell id="right" value="right wrist slot&lt;br&gt;zero image + mask" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e2e8f0;strokeColor=#64748b;fontSize=13;" vertex="1" parent="g_inputs">
+          <mxGeometry x="30" y="200" width="200" height="58" as="geometry"/>
+        </mxCell>
+        <mxCell id="prompt" value="language instruction" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;fontSize=13;" vertex="1" parent="g_inputs">
+          <mxGeometry x="30" y="285" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="state" value="robot state&lt;br&gt;8D -&gt; padded 32D" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;fontSize=13;" vertex="1" parent="g_inputs">
+          <mxGeometry x="30" y="345" width="200" height="58" as="geometry"/>
+        </mxCell>
+        <mxCell id="force" value="force_history&lt;br&gt;8 frames x 12D" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#d97706;fontSize=13;" vertex="1" parent="g_inputs">
+          <mxGeometry x="30" y="440" width="200" height="58" as="geometry"/>
+        </mxCell>
+        <mxCell id="adv" value="advantage / success&lt;br&gt;optional scalar" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fae8ff;strokeColor=#9333ea;fontSize=13;" vertex="1" parent="g_inputs">
+          <mxGeometry x="30" y="510" width="200" height="58" as="geometry"/>
+        </mxCell>
+        <mxCell id="actions" value="ground-truth actions a&lt;br&gt;30 x 32" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fee2e2;strokeColor=#dc2626;fontSize=13;" vertex="1" parent="g_inputs">
+          <mxGeometry x="30" y="625" width="200" height="58" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="g_vlm" value="VLM prefix stream: tokens that enter visual-language context" style="swimlane;html=1;startSize=34;rounded=1;whiteSpace=wrap;fillColor=#eff6ff;strokeColor=#2563eb;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="360" y="90" width="530" height="300" as="geometry"/>
+        </mxCell>
+        <mxCell id="siglip" value="SigLIP image encoder" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#bfdbfe;strokeColor=#1d4ed8;fontSize=14;fontStyle=1;" vertex="1" parent="g_vlm">
+          <mxGeometry x="45" y="75" width="180" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="tokenizer" value="PaliGemma tokenizer&lt;br&gt;instruction + discrete state" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#bbf7d0;strokeColor=#15803d;fontSize=14;fontStyle=1;" vertex="1" parent="g_vlm">
+          <mxGeometry x="45" y="180" width="180" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="prefix" value="prefix token sequence&lt;br&gt;image tokens + text/state tokens&lt;br&gt;&lt;b&gt;goes into VLM stream&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#1d4ed8;fontSize=14;" vertex="1" parent="g_vlm">
+          <mxGeometry x="295" y="115" width="190" height="95" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="g_flow" value="Flow matching noising" style="swimlane;html=1;startSize=34;rounded=1;whiteSpace=wrap;fillColor=#fff1f2;strokeColor=#dc2626;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="360" y="430" width="360" height="260" as="geometry"/>
+        </mxCell>
+        <mxCell id="eps" value="sample Gaussian noise&lt;br&gt;epsilon" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fee2e2;strokeColor=#dc2626;fontSize=13;" vertex="1" parent="g_flow">
+          <mxGeometry x="35" y="65" width="135" height="58" as="geometry"/>
+        </mxCell>
+        <mxCell id="time" value="sample time t&lt;br&gt;in (0, 1)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fee2e2;strokeColor=#dc2626;fontSize=13;" vertex="1" parent="g_flow">
+          <mxGeometry x="35" y="140" width="135" height="58" as="geometry"/>
+        </mxCell>
+        <mxCell id="xt" value="x_t = t epsilon + (1 - t) a&lt;br&gt;noisy action chunk" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fecaca;strokeColor=#b91c1c;fontSize=13;fontStyle=1;" vertex="1" parent="g_flow">
+          <mxGeometry x="205" y="62" width="125" height="72" as="geometry"/>
+        </mxCell>
+        <mxCell id="ut" value="target velocity&lt;br&gt;u_t = epsilon - a" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fecaca;strokeColor=#b91c1c;fontSize=13;fontStyle=1;" vertex="1" parent="g_flow">
+          <mxGeometry x="205" y="158" width="125" height="58" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="g_action" value="Action expert suffix stream: tokens that enter action expert" style="swimlane;html=1;startSize=34;rounded=1;whiteSpace=wrap;fillColor=#fef2f2;strokeColor=#dc2626;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="780" y="430" width="330" height="260" as="geometry"/>
+        </mxCell>
+        <mxCell id="ain" value="action_in_proj" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fecaca;strokeColor=#b91c1c;fontSize=14;fontStyle=1;" vertex="1" parent="g_action">
+          <mxGeometry x="45" y="82" width="115" height="58" as="geometry"/>
+        </mxCell>
+        <mxCell id="atok" value="action expert suffix tokens&lt;br&gt;30 tokens, hidden width&lt;br&gt;&lt;b&gt;goes into action expert&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fee2e2;strokeColor=#b91c1c;fontSize=13;" vertex="1" parent="g_action">
+          <mxGeometry x="185" y="68" width="120" height="90" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="g_cond" value="adaRMS condition: modulation signal, not ordinary tokens" style="swimlane;html=1;startSize=34;rounded=1;whiteSpace=wrap;fillColor=#fffbeb;strokeColor=#d97706;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="360" y="720" width="750" height="230" as="geometry"/>
+        </mxCell>
+        <mxCell id="temb" value="timestep t&lt;br&gt;sin/cos embedding + time MLP" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fde68a;strokeColor=#b45309;fontSize=13;" vertex="1" parent="g_cond">
+          <mxGeometry x="30" y="70" width="160" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="fenc" value="ForceEncoder&lt;br&gt;flatten 8x12 -&gt; MLP" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fde68a;strokeColor=#b45309;fontSize=13;" vertex="1" parent="g_cond">
+          <mxGeometry x="220" y="70" width="150" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="aenc" value="AdvantageEncoder&lt;br&gt;success/adv -&gt; MLP" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5d0fe;strokeColor=#9333ea;fontSize=13;" vertex="1" parent="g_cond">
+          <mxGeometry x="400" y="70" width="150" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="null" value="dropout / null advantage&lt;br&gt;training: replace cond sometimes" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e8ff;strokeColor=#9333ea;fontSize=12;dashed=1;" vertex="1" parent="g_cond">
+          <mxGeometry x="400" y="150" width="150" height="48" as="geometry"/>
+        </mxCell>
+        <mxCell id="sum" value="adarms_cond = time_cond&lt;br&gt;+ force_scale * force_cond&lt;br&gt;+ adv_scale * adv_cond" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fcd34d;strokeColor=#92400e;fontSize=13;fontStyle=1;" vertex="1" parent="g_cond">
+          <mxGeometry x="590" y="72" width="130" height="95" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="g_model" value="PaliGemma / Gemma transformer" style="swimlane;html=1;startSize=34;rounded=1;whiteSpace=wrap;fillColor=#f8fafc;strokeColor=#334155;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1170" y="180" width="330" height="510" as="geometry"/>
+        </mxCell>
+        <mxCell id="vlmstream" value="VLM prefix stream&lt;br&gt;image + text/state context" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#2563eb;fontSize=14;fontStyle=1;" vertex="1" parent="g_model">
+          <mxGeometry x="55" y="70" width="220" height="75" as="geometry"/>
+        </mxCell>
+        <mxCell id="ki_cache" value="KI path: prefix KV cache&lt;br&gt;stop_gradient(cache)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0e7ff;strokeColor=#4f46e5;fontSize=13;dashed=1;" vertex="1" parent="g_model">
+          <mxGeometry x="55" y="165" width="220" height="65" as="geometry"/>
+        </mxCell>
+        <mxCell id="expert" value="action expert stream&lt;br&gt;suffix action tokens attend to VLM context" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fee2e2;strokeColor=#dc2626;fontSize=14;fontStyle=1;" vertex="1" parent="g_model">
+          <mxGeometry x="55" y="270" width="220" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="arms" value="adaRMSNorm in action expert&lt;br&gt;modulated by adarms_cond&lt;br&gt;&lt;b&gt;[None, adarms_cond]&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#d97706;fontSize=13;fontStyle=1;" vertex="1" parent="g_model">
+          <mxGeometry x="55" y="375" width="220" height="90" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="outproj" value="action_out_proj" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e2e8f0;strokeColor=#475569;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1185" y="740" width="160" height="55" as="geometry"/>
+        </mxCell>
+        <mxCell id="vt" value="predicted velocity v_t&lt;br&gt;30 x 32" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e2e8f0;strokeColor=#475569;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="1390" y="740" width="150" height="55" as="geometry"/>
+        </mxCell>
+        <mxCell id="loss" value="flow matching loss&lt;br&gt;MSE(v_t, u_t)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fee2e2;strokeColor=#dc2626;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1390" y="850" width="150" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="ki_note" value="Knowledge Insulation (KI): action/tactile loss uses detached prefix KV cache, so gradients from this loss do not update SigLIP + VLM prefix backbone." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eef2ff;strokeColor=#4f46e5;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="930" y="90" width="520" height="62" as="geometry"/>
+        </mxCell>
+        <mxCell id="cfg_note" value="Advantage conditioning: success/advantage is encoded into adaRMS cond. During training, dropout can replace it with null cond. During inference, CFG can use v = v_uncond + scale * (v_cond - v_uncond)." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#faf5ff;strokeColor=#9333ea;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="40" y="845" width="300" height="95" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e_front_sig" style="endArrow=block;html=1;rounded=0;strokeColor=#2563eb;" edge="1" parent="1" source="front" target="siglip"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_wrist_sig" style="endArrow=block;html=1;rounded=0;strokeColor=#2563eb;" edge="1" parent="1" source="wrist" target="siglip"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_right_sig" style="endArrow=block;html=1;rounded=0;strokeColor=#64748b;" edge="1" parent="1" source="right" target="siglip"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_prompt_tok" style="endArrow=block;html=1;rounded=0;strokeColor=#16a34a;" edge="1" parent="1" source="prompt" target="tokenizer"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_state_tok" style="endArrow=block;html=1;rounded=0;strokeColor=#16a34a;" edge="1" parent="1" source="state" target="tokenizer"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_sig_prefix" style="endArrow=block;html=1;rounded=0;strokeColor=#2563eb;" edge="1" parent="1" source="siglip" target="prefix"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_tok_prefix" style="endArrow=block;html=1;rounded=0;strokeColor=#16a34a;" edge="1" parent="1" source="tokenizer" target="prefix"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_prefix_vlm" value="prefix tokens" style="endArrow=block;html=1;rounded=0;strokeColor=#2563eb;fontSize=12;" edge="1" parent="1" source="prefix" target="vlmstream"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <mxCell id="e_actions_xt" style="endArrow=block;html=1;rounded=0;strokeColor=#dc2626;" edge="1" parent="1" source="actions" target="xt"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_actions_ut" style="endArrow=block;html=1;rounded=0;strokeColor=#dc2626;" edge="1" parent="1" source="actions" target="ut"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_eps_xt" style="endArrow=block;html=1;rounded=0;strokeColor=#dc2626;" edge="1" parent="1" source="eps" target="xt"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_eps_ut" style="endArrow=block;html=1;rounded=0;strokeColor=#dc2626;" edge="1" parent="1" source="eps" target="ut"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_time_xt" style="endArrow=block;html=1;rounded=0;strokeColor=#dc2626;" edge="1" parent="1" source="time" target="xt"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_xt_ain" style="endArrow=block;html=1;rounded=0;strokeColor=#dc2626;" edge="1" parent="1" source="xt" target="ain"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_ain_atok" style="endArrow=block;html=1;rounded=0;strokeColor=#dc2626;" edge="1" parent="1" source="ain" target="atok"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_atok_expert" value="suffix tokens" style="endArrow=block;html=1;rounded=0;strokeColor=#dc2626;fontSize=12;" edge="1" parent="1" source="atok" target="expert"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <mxCell id="e_time_temb" style="endArrow=block;html=1;rounded=0;strokeColor=#d97706;" edge="1" parent="1" source="time" target="temb"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_force_fenc" style="endArrow=block;html=1;rounded=0;strokeColor=#d97706;" edge="1" parent="1" source="force" target="fenc"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_adv_aenc" style="endArrow=block;html=1;rounded=0;strokeColor=#9333ea;" edge="1" parent="1" source="adv" target="aenc"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_aenc_null" style="endArrow=block;html=1;rounded=0;strokeColor=#9333ea;dashed=1;" edge="1" parent="1" source="aenc" target="null"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_temb_sum" style="endArrow=block;html=1;rounded=0;strokeColor=#d97706;" edge="1" parent="1" source="temb" target="sum"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_fenc_sum" style="endArrow=block;html=1;rounded=0;strokeColor=#d97706;" edge="1" parent="1" source="fenc" target="sum"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_null_sum" style="endArrow=block;html=1;rounded=0;strokeColor=#9333ea;" edge="1" parent="1" source="null" target="sum"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_sum_arms" value="adarms_cond" style="endArrow=block;html=1;rounded=0;strokeColor=#d97706;fontSize=12;fontStyle=1;" edge="1" parent="1" source="sum" target="arms"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_arms_expert" value="modulates only action expert" style="endArrow=block;html=1;rounded=0;strokeColor=#d97706;fontSize=12;fontStyle=1;" edge="1" parent="1" source="arms" target="expert"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <mxCell id="e_vlm_expert" value="context attention" style="endArrow=block;html=1;rounded=0;strokeColor=#334155;fontSize=12;" edge="1" parent="1" source="vlmstream" target="expert"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_vlm_cache" value="if KI" style="endArrow=block;html=1;rounded=0;strokeColor=#4f46e5;dashed=1;fontSize=12;" edge="1" parent="1" source="vlmstream" target="ki_cache"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_cache_expert" value="detached prefix cache" style="endArrow=block;html=1;rounded=0;strokeColor=#4f46e5;dashed=1;fontSize=12;" edge="1" parent="1" source="ki_cache" target="expert"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_expert_out" style="endArrow=block;html=1;rounded=0;strokeColor=#475569;" edge="1" parent="1" source="expert" target="outproj"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_out_vt" style="endArrow=block;html=1;rounded=0;strokeColor=#475569;" edge="1" parent="1" source="outproj" target="vt"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_vt_loss" style="endArrow=block;html=1;rounded=0;strokeColor=#dc2626;" edge="1" parent="1" source="vt" target="loss"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_ut_loss" style="endArrow=block;html=1;rounded=0;strokeColor=#dc2626;" edge="1" parent="1" source="ut" target="loss"><mxGeometry relative="1" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
